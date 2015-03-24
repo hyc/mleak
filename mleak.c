@@ -46,7 +46,8 @@ static mallfunc *ml_valloc;
 
 #define WRT(STRCONST)	STRCONST, sizeof(STRCONST)-1
 
-static int ml_fd;
+static FILE *ml_fd;
+static char ml_buf[1048576];
 
 static int ml_backtrace(void **stk, int stknum)
 {
@@ -57,11 +58,9 @@ static int ml_backtrace(void **stk, int stknum)
 
 	unw_getcontext(&uc);
 	unw_init_local(&cursor, &uc);
-	for (i=-1; i<stknum; i++) {
+	for (i=0; i<stknum; i++) {
 		if (unw_step(&cursor) <= 0)
 			break;
-		if (i < 0)
-			continue;
 		unw_get_reg(&cursor, UNW_REG_IP, &stk[i]);
 	}
 	return i;
@@ -74,6 +73,7 @@ static void ml_fini()
 	int fd, len;
 	char buf[1024], *ptr;
 
+	fclose(ml_fd);
 	fd = open("ml.info", O_CREAT|O_WRONLY, 0600);
 	h = dlopen(NULL, RTLD_LAZY);
 	dlinfo(h, RTLD_DI_LINKMAP, &lm);
@@ -104,7 +104,6 @@ static void ml_init()
 	mlinfunc *mlin;
 
 	ml_initing = 1;
-	ml_fd = open("ml.data", O_WRONLY|O_CREAT|O_TRUNC, 0600);
 	(void) pthread_key_create(&ml_key, NULL);
 	mall = dlsym( RTLD_NEXT, "malloc");
 	if (!mall) {
@@ -123,6 +122,8 @@ static void ml_init()
 	ml_valloc = vall;
 	ml_memalign = mlin;
 	atexit(ml_fini);
+	ml_fd = fopen("ml.data", "w");
+	setbuffer(ml_fd, ml_buf, sizeof(ml_buf));
 	ml_initing = 0;
 }
 
@@ -156,10 +157,9 @@ ml_info *ml_ithread()
 /* my own malloc/realloc/free */
 void *malloc(size_t size)
 {
-	void *result;
-#if 0
-	void **stk;
+	void *result, **stk;
 	ml_rec2 *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -187,18 +187,14 @@ void *malloc(size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		ml_rec2 mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = ALLOC;
-		mr.size = size;
-		mr.addr = result;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec2 *)stack;
+		mr->code = ALLOC;
+		mr->size = size;
+		mr->addr = result;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 	}
 #endif
 
@@ -208,10 +204,9 @@ void *malloc(size_t size)
 
 void *calloc(size_t nelem, size_t size)
 {
-	void *result;
-#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -241,18 +236,14 @@ void *calloc(size_t nelem, size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		ml_rec2 mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = ALLOC;
-		mr.size = size;
-		mr.addr = result;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec2 *)stack;
+		mr->code = ALLOC;
+		mr->size = size;
+		mr->addr = result;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 	}
 #endif
 
@@ -262,10 +253,9 @@ void *calloc(size_t nelem, size_t size)
 
 void *valloc(size_t size)
 {
-	void *result;
-#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -292,18 +282,14 @@ void *valloc(size_t size)
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
 #else
-		ml_rec2 mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = ALLOC;
-		mr.size = size;
-		mr.addr = result;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec2 *)stack;
+		mr->code = ALLOC;
+		mr->size = size;
+		mr->addr = result;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 #endif
 
 	/* return the pointer */
@@ -312,10 +298,9 @@ void *valloc(size_t size)
 
 void *realloc(void * ptr, size_t size)
 {
-	void *result;
-#if 0
 	void *result, **stk;
 	ml_rec3 *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -344,19 +329,15 @@ void *realloc(void * ptr, size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		ml_rec3 mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = REALLOC;
-		mr.size = size;
-		mr.addr = result;
-		mr.orig = ptr;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec3 *)stack;
+		mr->code = REALLOC;
+		mr->size = size;
+		mr->addr = result;
+		mr->orig = ptr;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 	}
 #endif
 
@@ -366,10 +347,9 @@ void *realloc(void * ptr, size_t size)
 
 void *memalign(size_t align, size_t size)
 {
-	void *result;
-#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -396,18 +376,14 @@ void *memalign(size_t align, size_t size)
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
 #else
-		ml_rec2 mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = ALLOC;
-		mr.size = size;
-		mr.addr = result;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec2 *)stack;
+		mr->code = ALLOC;
+		mr->size = size;
+		mr->addr = result;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 #endif
 
 	/* return the pointer */
@@ -416,9 +392,9 @@ void *memalign(size_t align, size_t size)
 
 void free(void * ptr)
 {
-#if 0
 	void **stk;
 	ml_rec *mr;
+#if 0
 	ml_info *mi;
 #endif
 
@@ -445,17 +421,13 @@ void free(void * ptr)
 	mi->mi_live = 0;
 #else
 	{
-		ml_rec mr;
-		void *stack[ML_STACK];
-		struct iovec iov[2];
-		mr.code = FREE;
-		mr.addr = ptr;
-		mr.nstk = ml_backtrace(stack, ml_stacknum);
-		iov[0].iov_base = &mr;
-		iov[0].iov_len = sizeof(mr);
-		iov[1].iov_base = stack;
-		iov[1].iov_len = mr.nstk * sizeof(void *);
-		writev(ml_fd, iov, 2);
+		void *stack[ML_STACK*4];
+		mr = (ml_rec *)stack;
+		mr->code = FREE;
+		mr->addr = ptr;
+		stk = (void **)(mr+1);
+		mr->nstk = ml_backtrace(stk, ml_stacknum);
+		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
 	}
 #endif
 }
