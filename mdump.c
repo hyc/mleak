@@ -245,6 +245,7 @@ int md_read_memory_trace(int options, char *file)
 	}
 	fstat(fd, &st);
 	mr = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	madvise(mr, st.st_size, MADV_SEQUENTIAL);
 	close(fd);
 
 	/* read the file and generate memory datas */
