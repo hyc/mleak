@@ -15,7 +15,7 @@
 static pthread_key_t ml_key;
 
 int ml_stacknum = 16;	/* length of stack trace */
-size_t ml_size = 1024*1048576;	/* 1GB */
+size_t ml_size = 4096*1048576L;	/* 4GB */
 
 static int ml_initing;
 
@@ -123,6 +123,7 @@ ml_info *ml_ithread()
 	mi->mi_tail = mi->mi_data;
 	mi->mi_live = 0;
 	pthread_setspecific(ml_key, mi);
+	madvise(mi, ml_size, MADV_SEQUENTIAL);
 	return mi;
 }
 
