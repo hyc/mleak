@@ -10,12 +10,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+
 #include "mleak.h"
 
 static pthread_key_t ml_key;
 
-int ml_stacknum = 16;	/* length of stack trace */
-size_t ml_size = 4096*1048576L;	/* 4GB */
+#define ML_STACK	16
+int ml_stacknum = ML_STACK;	/* length of stack trace */
+size_t ml_size = 1024*1048576L;	/* 1GB */
 
 static int ml_initing;
 
@@ -41,6 +45,27 @@ static mlinfunc *ml_memalign;
 static mallfunc *ml_valloc;
 
 #define WRT(STRCONST)	STRCONST, sizeof(STRCONST)-1
+
+static int ml_fd;
+
+static int ml_backtrace(void **stk, int stknum)
+{
+	unw_cursor_t cursor;
+	unw_context_t uc;
+	unw_word_t ip;
+	int i;
+
+	unw_getcontext(&uc);
+	unw_init_local(&cursor, &uc);
+	for (i=-1; i<stknum; i++) {
+		if (unw_step(&cursor) <= 0)
+			break;
+		if (i < 0)
+			continue;
+		unw_get_reg(&cursor, UNW_REG_IP, &stk[i]);
+	}
+	return i;
+}
 
 static void ml_fini()
 {
@@ -79,6 +104,7 @@ static void ml_init()
 	mlinfunc *mlin;
 
 	ml_initing = 1;
+	ml_fd = open("ml.data", O_WRONLY|O_CREAT|O_TRUNC, 0600);
 	(void) pthread_key_create(&ml_key, NULL);
 	mall = dlsym( RTLD_NEXT, "malloc");
 	if (!mall) {
@@ -113,7 +139,7 @@ ml_info *ml_ithread()
 		exit(1);
 	}
 	ftruncate(fd, ml_size);
-	mi = mmap(NULL, ml_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	mi = mmap(NULL, ml_size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_POPULATE, fd, 0);
 	if (mi == MAP_FAILED) {
 		perror("mmap");
 		exit(1);
@@ -130,13 +156,17 @@ ml_info *ml_ithread()
 /* my own malloc/realloc/free */
 void *malloc(size_t size)
 {
-	void *result, **stk;
+	void *result;
+#if 0
+	void **stk;
 	ml_rec2 *mr;
 	ml_info *mi;
+#endif
 
 	result = ml_malloc(size);
 	if (ml_initing) return result;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -155,6 +185,22 @@ void *malloc(size_t size)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+	{
+		ml_rec2 mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = ALLOC;
+		mr.size = size;
+		mr.addr = result;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+	}
+#endif
 
 	/* return the pointer */
 	return(result);
@@ -162,15 +208,19 @@ void *malloc(size_t size)
 
 void *calloc(size_t nelem, size_t size)
 {
+	void *result;
+#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
 	ml_info *mi;
+#endif
 
 	result = ml_calloc(nelem, size);
 	if (ml_initing) return result;
 
 	size *= nelem;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -189,6 +239,22 @@ void *calloc(size_t nelem, size_t size)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+	{
+		ml_rec2 mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = ALLOC;
+		mr.size = size;
+		mr.addr = result;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+	}
+#endif
 
 	/* return the pointer */
 	return(result);
@@ -196,13 +262,17 @@ void *calloc(size_t nelem, size_t size)
 
 void *valloc(size_t size)
 {
+	void *result;
+#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
 	ml_info *mi;
+#endif
 
 	result = ml_valloc(size);
 	if (ml_initing) return result;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -221,6 +291,20 @@ void *valloc(size_t size)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+		ml_rec2 mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = ALLOC;
+		mr.size = size;
+		mr.addr = result;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+#endif
 
 	/* return the pointer */
 	return(result);
@@ -228,13 +312,17 @@ void *valloc(size_t size)
 
 void *realloc(void * ptr, size_t size)
 {
+	void *result;
+#if 0
 	void *result, **stk;
 	ml_rec3 *mr;
 	ml_info *mi;
+#endif
 
 	result = ml_realloc(ptr, size);
 	if (ml_initing) return result;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -254,6 +342,23 @@ void *realloc(void * ptr, size_t size)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+	{
+		ml_rec3 mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = REALLOC;
+		mr.size = size;
+		mr.addr = result;
+		mr.orig = ptr;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+	}
+#endif
 
 	/* return the pointer */
 	return(result);
@@ -261,13 +366,17 @@ void *realloc(void * ptr, size_t size)
 
 void *memalign(size_t align, size_t size)
 {
+	void *result;
+#if 0
 	void *result, **stk;
 	ml_rec2 *mr;
 	ml_info *mi;
+#endif
 
 	result = ml_memalign(align, size);
 	if (ml_initing) return result;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -286,6 +395,20 @@ void *memalign(size_t align, size_t size)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+		ml_rec2 mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = ALLOC;
+		mr.size = size;
+		mr.addr = result;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+#endif
 
 	/* return the pointer */
 	return(result);
@@ -293,13 +416,16 @@ void *memalign(size_t align, size_t size)
 
 void free(void * ptr)
 {
+#if 0
 	void **stk;
 	ml_rec *mr;
 	ml_info *mi;
+#endif
 
 	ml_free(ptr);
 	if (ml_initing) return;
 
+#if 0
 	mi = pthread_getspecific(ml_key);
 	if (!mi)
 		mi = ml_ithread();
@@ -317,6 +443,21 @@ void free(void * ptr)
 	mr->nstk = backtrace(stk, ml_stacknum);
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
+#else
+	{
+		ml_rec mr;
+		void *stack[ML_STACK];
+		struct iovec iov[2];
+		mr.code = FREE;
+		mr.addr = ptr;
+		mr.nstk = ml_backtrace(stack, ml_stacknum);
+		iov[0].iov_base = &mr;
+		iov[0].iov_len = sizeof(mr);
+		iov[1].iov_base = stack;
+		iov[1].iov_len = mr.nstk * sizeof(void *);
+		writev(ml_fd, iov, 2);
+	}
+#endif
 }
 
 #define HEAPSIZE	(1048576*10)

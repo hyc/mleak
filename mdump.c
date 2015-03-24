@@ -234,7 +234,6 @@ int md_read_memory_trace(int options, char *file)
 	int fd;
 	MD_Loc *cstack;
 	struct stat st;
-	ml_info *mi;
 	ml_rec *mr;
 
 	fd = open(file, O_RDONLY);
@@ -243,11 +242,10 @@ int md_read_memory_trace(int options, char *file)
 		exit(1);
 	}
 	fstat(fd, &st);
-	mi = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
+	mr = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
 	close(fd);
 
 	/* read the file and generate memory datas */
-	mr = (ml_rec *)mi->mi_data;
 	while (mr->code) {
 		void **stk;
 		switch(mr->code) {
