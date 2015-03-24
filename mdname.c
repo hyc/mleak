@@ -236,14 +236,16 @@ int md_compare_names(const void *e1, const void *e2)
 }
 int md_compare_pointers(const void *e1, const void *e2)
 {
-  return ((MDSym*)e1)->addr - ((MDSym*)e2)->addr;
+  long l = ((MDSym*)e1)->addr - ((MDSym*)e2)->addr;
+  return l < 0 ? -1 : l > 0;
 }
 
 /* sort in descending order */
 int md_compare_dynobj(const void *e1, const void *e2)
 {
 	MD_DynObj **d1 = (MD_DynObj **)e1, **d2 = (MD_DynObj **)e2;
-  return (*d2)->base - (*d1)->base;
+	long l = (*d2)->base - (*d1)->base;
+  return l < 0 ? -1 : l > 0;
 }
 
 int md_init_extract_dynamic(int core_num_syms, asymbol **core_syms, int sortn)
@@ -603,10 +605,11 @@ int md_extract_names(int options, char *exec)
 	      not_all_done = 1;
 	      continue;
 	      }
+		if (k && reqlist[i].loc->addr < md_objects[k-1]->base)
+			reqlist[i].loc->object = object;
 	    if (md_extract_dynamic(&reqlist[i], &j) &&
         	(md_syms[j].flag & (BSF_GLOBAL|BSF_LOCAL|BSF_WEAK)))
 	      {
-	      reqlist[i].loc->object = object;
 	      reqlist[i].done = 1;
 	      md_find_line(core_bfd, core_text_sect, core_syms,
 			            (bfd_vma)(reqlist[i].loc->addr - md_objects[k]->base),
@@ -630,7 +633,8 @@ int md_extract_names(int options, char *exec)
     if (reqlist[i].done == 0)
       {
       reqlist[i].loc->file = md_ndef_file;
-      reqlist[i].loc->object = md_ndef_object;
+	  if (!reqlist[i].loc->object)
+        reqlist[i].loc->object = md_ndef_object;
       }
     else
       {
