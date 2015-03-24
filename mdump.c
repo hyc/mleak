@@ -30,13 +30,15 @@ static void *md_heap_end=0;
 static int
 md_index_cmp(MD_Mem *m1, MD_Mem *m2)
 {
-	return (char *)m1->ptr - (char *)m2->ptr;
+	long l = (char *)m1->ptr - (char *)m2->ptr;
+	return l < 0 ? -1 : l > 0;
 }
 
 static int
 md_index_ptr_cmp(void *ptr, MD_Mem *m)
 {
-	return (char *)ptr - (char *)m->ptr;
+	long l = (char *)ptr - (char *)m->ptr;
+	return l < 0 ? -1 : l > 0;
 }
 
 /* search for the given pointer in the list (starting at the end
@@ -251,6 +253,8 @@ int md_read_memory_trace(int options, char *file)
 		switch(mr->code) {
 		case FREE:
 			stk = (void **)(mr+1);
+			if (mr->addr == NULL)
+				break;
 			cstack = md_expand_stack(mr->nstk, stk);
 			md_add_free(options, mr, cstack);
 			break;

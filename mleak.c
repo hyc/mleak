@@ -15,7 +15,11 @@
 
 #include "mleak.h"
 
+#if 0
 static pthread_key_t ml_key;
+#endif
+
+static pthread_mutex_t ml_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define ML_STACK	16
 int ml_stacknum = ML_STACK;	/* length of stack trace */
@@ -46,8 +50,8 @@ static mallfunc *ml_valloc;
 
 #define WRT(STRCONST)	STRCONST, sizeof(STRCONST)-1
 
-static FILE *ml_fd;
-static char ml_buf[1048576];
+static int ml_fd;
+static char ml_buf[1048576], *ml_ptr, *ml_end;
 
 static int ml_backtrace(void **stk, int stknum)
 {
@@ -73,7 +77,9 @@ static void ml_fini()
 	int fd, len;
 	char buf[1024], *ptr;
 
-	fclose(ml_fd);
+	if (ml_ptr > ml_buf)
+		write(ml_fd, ml_buf, ml_ptr - ml_buf);
+	close(ml_fd);
 	fd = open("ml.info", O_CREAT|O_WRONLY, 0600);
 	h = dlopen(NULL, RTLD_LAZY);
 	dlinfo(h, RTLD_DI_LINKMAP, &lm);
@@ -104,7 +110,9 @@ static void ml_init()
 	mlinfunc *mlin;
 
 	ml_initing = 1;
+#if 0
 	(void) pthread_key_create(&ml_key, NULL);
+#endif
 	mall = dlsym( RTLD_NEXT, "malloc");
 	if (!mall) {
 		write(2, WRT("ml_init failed to hook malloc!\n"));
@@ -122,11 +130,13 @@ static void ml_init()
 	ml_valloc = vall;
 	ml_memalign = mlin;
 	atexit(ml_fini);
-	ml_fd = fopen("ml.data", "w");
-	setbuffer(ml_fd, ml_buf, sizeof(ml_buf));
+	ml_fd = open("ml.data", O_CREAT|O_WRONLY|O_TRUNC, 0600);
+	ml_ptr = ml_buf;
+	ml_end = ml_buf + sizeof(ml_buf);
 	ml_initing = 0;
 }
 
+#if 0
 ml_info *ml_ithread()
 {
 	char buf[64];
@@ -153,6 +163,7 @@ ml_info *ml_ithread()
 	madvise(mi, ml_size, MADV_SEQUENTIAL);
 	return mi;
 }
+#endif
 
 /* my own malloc/realloc/free */
 void *malloc(size_t size)
@@ -187,14 +198,23 @@ void *malloc(size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		void *stack[ML_STACK*4];
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec2 *)stack;
 		mr->code = ALLOC;
 		mr->size = size;
 		mr->addr = result;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
 	}
 #endif
 
@@ -236,14 +256,23 @@ void *calloc(size_t nelem, size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		void *stack[ML_STACK*4];
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec2 *)stack;
 		mr->code = ALLOC;
 		mr->size = size;
 		mr->addr = result;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
 	}
 #endif
 
@@ -282,14 +311,25 @@ void *valloc(size_t size)
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
 #else
-		void *stack[ML_STACK*4];
+	{
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec2 *)stack;
 		mr->code = ALLOC;
 		mr->size = size;
 		mr->addr = result;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
+	}
 #endif
 
 	/* return the pointer */
@@ -329,7 +369,8 @@ void *realloc(void * ptr, size_t size)
 	mi->mi_live = 0;
 #else
 	{
-		void *stack[ML_STACK*4];
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec3 *)stack;
 		mr->code = REALLOC;
 		mr->size = size;
@@ -337,7 +378,15 @@ void *realloc(void * ptr, size_t size)
 		mr->orig = ptr;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
 	}
 #endif
 
@@ -376,14 +425,25 @@ void *memalign(size_t align, size_t size)
 	mi->mi_tail = stk + mr->nstk;
 	mi->mi_live = 0;
 #else
-		void *stack[ML_STACK*4];
+	{
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec2 *)stack;
 		mr->code = ALLOC;
 		mr->size = size;
 		mr->addr = result;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
+	}
 #endif
 
 	/* return the pointer */
@@ -399,7 +459,7 @@ void free(void * ptr)
 #endif
 
 	ml_free(ptr);
-	if (ml_initing) return;
+	if (ml_initing || !ptr) return;
 
 #if 0
 	mi = pthread_getspecific(ml_key);
@@ -421,13 +481,22 @@ void free(void * ptr)
 	mi->mi_live = 0;
 #else
 	{
-		void *stack[ML_STACK*4];
+		void *stack[4*ML_STACK];
+		int len;
 		mr = (ml_rec *)stack;
 		mr->code = FREE;
 		mr->addr = ptr;
 		stk = (void **)(mr+1);
 		mr->nstk = ml_backtrace(stk, ml_stacknum);
-		fwrite(mr, sizeof(*mr)+sizeof(void *) * mr->nstk, 1, ml_fd);
+		len = sizeof(*mr) + mr->nstk * sizeof(void *);
+		pthread_mutex_lock(&ml_mutex);
+		if (ml_ptr + len >= ml_end) {
+			write(ml_fd, ml_buf, ml_ptr - ml_buf);
+			ml_ptr = ml_buf;
+		}
+		memcpy(ml_ptr, mr, len);
+		ml_ptr += len;
+		pthread_mutex_unlock(&ml_mutex);
 	}
 #endif
 }
