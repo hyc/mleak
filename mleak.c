@@ -221,9 +221,7 @@ void *calloc(size_t nelem, size_t size)
 void *realloc(void *ptr, size_t size)
 {
 	size_t *result, *p2, len;
-	size_t osize, tsize;
-	int nstk, ostk;
-	void *tmp;
+	int nstk;
 
 	if (!ptr)
 		return malloc(size);
@@ -234,16 +232,6 @@ void *realloc(void *ptr, size_t size)
 		return ml_realloc(ptr, size);
 
 	p2 -= 2;
-	osize = *p2;
-	ostk = osize >> 56;
-	osize &= 0xffffffffffffffL;
-	tsize = osize;
-	if (size < tsize)
-		tsize = size;
-	tmp = ml_malloc(tsize);
-	if (!tmp)
-		return NULL;
-	memcpy(tmp, ptr, tsize);
 	p2[1] = 0;
 	p2 -= ml_stacknum;
 
@@ -255,9 +243,7 @@ void *realloc(void *ptr, size_t size)
 		size |= ((long)nstk << 56);
 		*result++ = size;
 		*result++ = ml_magic;
-		memcpy(result, tmp, tsize);
 	}
-	ml_free(tmp);
 
 	/* return the pointer */
 	return(result);
