@@ -13,7 +13,7 @@
 
 #include "mleak.h"
 
-#define ML_STACK	16
+#define ML_STACK	12
 int ml_stacknum = ML_STACK;	/* length of stack trace */
 
 /* hooks */
@@ -38,7 +38,7 @@ static freefunc *ml_free = ml_ifree;
 
 static const size_t ml_magic = 0x600FBA11DEAFB0B3L;
 
-static int ml_backtrace(void **stk, int stknum)
+static int ml_backtrace(size_t *stk, int stknum)
 {
 	unw_cursor_t cursor;
 	unw_context_t uc;
@@ -69,10 +69,7 @@ static void ml_scan(void *lo, void *hi, int fd)
 			mr.nstk = mr.size >> 56;
 			mr.size &= 0xffffffffffffffL;
 			mr.addr = lp+1;
-			p2 = (char *)(lp - 1);
-			if (mr.nstk & 1)
-				p2 -= sizeof(void *);
-			p2 -= mr.nstk * sizeof(void *);
+			p2 = (char *)(lp - 1 - ml_stacknum);
 			write(fd, &mr, sizeof(mr));
 			write(fd, p2, mr.nstk * sizeof(void *));
 		}
@@ -165,20 +162,13 @@ static void ml_init()
 void *malloc(size_t size)
 {
 	size_t *result, len;
-	void *stack[4*ML_STACK];
 	int nstk;
 
-	nstk = ml_backtrace(stack, ml_stacknum);
-	len = nstk + 1 /* magic */ + 1 /* size + nstk */;
-	if (nstk & 1)
-		len++;	/* padding */
-
+	len = ml_stacknum + 1 /* magic */ + 1 /* size + nstk */;
 	result = ml_malloc(size + len * sizeof(void*));
 	if (result) {
-		memcpy(result, stack, nstk * sizeof(void *));
-		result += nstk;
-		if (nstk & 1)
-			result++;
+		nstk = ml_backtrace(result, ml_stacknum);
+		result += ml_stacknum;
 		size |= ((long)nstk << 56);
 		*result++ = size;
 		*result++ = ml_magic;
@@ -191,21 +181,15 @@ void *malloc(size_t size)
 void *calloc(size_t nelem, size_t size)
 {
 	size_t *result, len;
-	void *stack[4*ML_STACK];
 	int nstk;
 
-	nstk = ml_backtrace(stack, ml_stacknum);
-	len = nstk + 1 /* magic */ + 1 /* size + nstk */;
-	if (nstk & 1)
-		len++;	/* padding */
+	len = ml_stacknum + 1 /* magic */ + 1 /* size + nstk */;
 
 	size *= nelem;
 	result = ml_calloc(1, size + len * sizeof(void*));
 	if (result) {
-		memcpy(result, stack, nstk * sizeof(void *));
-		result += nstk;
-		if (nstk & 1)
-			result++;
+		nstk = ml_backtrace(result, ml_stacknum);
+		result += ml_stacknum;
 		size |= ((long)nstk << 56);
 		*result++ = size;
 		*result++ = ml_magic;
@@ -218,7 +202,6 @@ void *calloc(size_t nelem, size_t size)
 void *realloc(void *ptr, size_t size)
 {
 	size_t *result, *p2, len;
-	void *stack[4*ML_STACK];
 	size_t osize, tsize;
 	int nstk, ostk;
 	void *tmp;
@@ -243,21 +226,13 @@ void *realloc(void *ptr, size_t size)
 		return NULL;
 	memcpy(tmp, ptr, tsize);
 	p2[1] = 0;
-	if (ostk & 1)
-		p2--;
-	p2 -= ostk;
+	p2 -= ml_stacknum;
 
-	nstk = ml_backtrace(stack, ml_stacknum);
-	len = nstk + 1 /* magic */ + 1 /* size + nstk */;
-	if (nstk & 1)
-		len++;	/* padding */
-
+	len = ml_stacknum + 1 /* magic */ + 1 /* size + nstk */;
 	result = ml_realloc(p2, size + len * sizeof(void *));
 	if (result) {
-		memcpy(result, stack, nstk * sizeof(void *));
-		result += nstk;
-		if (nstk & 1)
-			result++;
+		nstk = ml_backtrace(result, ml_stacknum);
+		result += ml_stacknum;
 		size |= ((long)nstk << 56);
 		*result++ = size;
 		*result++ = ml_magic;
@@ -272,8 +247,6 @@ void *realloc(void *ptr, size_t size)
 void free(void *ptr)
 {
 	size_t *p2;
-	size_t osize;
-	int ostk;
 
 	if (!ptr) {
 		ml_free(ptr);
@@ -287,14 +260,8 @@ void free(void *ptr)
 		return;
 	}
 
-	p2 -= 2;
-	p2[1] = 0;
-	osize = *p2;
-	ostk = osize >> 56;
-	osize &= 0xffffffffffffffL;
-	if (ostk & 1)
-		p2--;
-	p2 -= ostk;
+	p2[-1] = 0;
+	p2 -= (2+ml_stacknum);
 	ml_free(p2);
 }
 
