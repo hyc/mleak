@@ -1,3 +1,6 @@
+/* malloc tracer for memory leak tracking
+ * -- Howard Chu, hyc@symas.com 2015-03-24
+ */
 typedef enum codes {
 	ALLOC = 1, FREE, REALLOC } codes;
 
@@ -25,7 +28,7 @@ typedef struct ml_rec3 {	/* used for realloc */
 	void *orig;
 } ml_rec3;
 
-typedef struct ml_info {
+typedef struct ml_info {	/* no longer used */
 	void **mi_end;
 	void *mi_tail;
 	int mi_live;

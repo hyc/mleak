@@ -1,3 +1,7 @@
+/* malloc tracer for memory leak tracking
+ * This fragment actually prints the leak report
+ * -- Howard Chu, hyc@symas.com 2015-03-24
+ */
 #define IFDECO  if (options & MD_NO_DECORATION)
 #define IFNDECO if (!(options & MD_NO_DECORATION))
 

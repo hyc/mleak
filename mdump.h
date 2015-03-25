@@ -1,3 +1,6 @@
+/* malloc tracer for memory leak tracking
+ * -- Howard Chu, hyc@symas.com 2015-03-24
+ */
 /** used MACROS and other DEFINES **/
 /* the MAX/MIN macro */
 #define MD_MAX(a,b)  (((a)>(b))?(a):(b))

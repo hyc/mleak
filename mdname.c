@@ -1,3 +1,8 @@
+/* malloc tracer for memory leak tracking
+ * This file contains routines to map addresses to object files,
+ * symbol names, and source locations.
+ * -- Howard Chu, hyc@symas.com 2015-03-24
+ */
 #include <stdio.h>
 #include <malloc.h>
 #include <string.h>

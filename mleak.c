@@ -1,5 +1,9 @@
-#define _GNU_SOURCE
+/* malloc tracer for memory leak tracking
+ * -- Howard Chu, hyc@symas.com 2015-03-24
+ */
+#define _GNU_SOURCE	/* need this to get RTLD_NEXT defined */
 #include <dlfcn.h>
+
 #include <link.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -13,7 +17,9 @@
 
 #include "mleak.h"
 
+#ifndef ML_STACK
 #define ML_STACK	12
+#endif
 int ml_stacknum = ML_STACK;	/* length of stack trace */
 
 /* hooks */
@@ -22,7 +28,7 @@ typedef void *(callfunc)(size_t, size_t);
 typedef void *(rallfunc)(void *, size_t);
 typedef void (freefunc)(void *);
 
-/* temporary allocators for rtld init */
+/* temporary allocators for rtld init - dlsym uses malloc */
 static mallfunc ml_imalloc;
 static callfunc ml_icalloc;
 static rallfunc ml_irealloc;
@@ -34,10 +40,13 @@ static callfunc *ml_calloc = ml_icalloc;
 static rallfunc *ml_realloc = ml_irealloc;
 static freefunc *ml_free = ml_ifree;
 
+/* Helper for using string constants with write() */
 #define WRT(STRCONST)	STRCONST, sizeof(STRCONST)-1
 
+/* Magic constant identifying our malloc'd blocks */
 static const size_t ml_magic = 0x600FBA11DEAFB0B3L;
 
+/* Store a stacktrace into stk with up to stknum levels */
 static int ml_backtrace(size_t *stk, int stknum)
 {
 	unw_cursor_t cursor;
@@ -55,6 +64,9 @@ static int ml_backtrace(size_t *stk, int stknum)
 	return i;
 }
 
+/* Scan the memory region from lo to hi looking for
+ * malloc'd blocks identified by our magic constant
+ */
 static void ml_scan(void *lo, void *hi, int fd)
 {
 	long *lp = lo, *end = hi;
@@ -79,6 +91,7 @@ static void ml_scan(void *lo, void *hi, int fd)
 
 static char ml_mapbuf[128*1024];
 
+/* Generate output at program end */
 static void ml_fini()
 {
 	void *h;
@@ -86,6 +99,7 @@ static void ml_fini()
 	int fd, mfd, len;
 	char *ptr, *end;
 
+	/* Output the loader map */
 	fd = open("ml.info", O_CREAT|O_WRONLY, 0600);
 	h = dlopen(NULL, RTLD_LAZY);
 	dlinfo(h, RTLD_DI_LINKMAP, &lm);
@@ -103,6 +117,8 @@ static void ml_fini()
 			write(fd, ml_mapbuf, ptr-ml_mapbuf);
 		}
 	close(fd);
+
+	/* Scan the process maps for heap-like memory regions */
 	fd = open("/proc/self/maps", O_RDONLY);
 	len = read(fd, ml_mapbuf, sizeof(ml_mapbuf));
 	close(fd);
@@ -114,6 +130,7 @@ static void ml_fini()
 		void *lo, *hi;
 		int off;
 		char *name;
+		/* Only private read/write regions are heap candidates */
 		if (sscanf(ptr, "%p-%p rw-p %x", &lo, &hi, &off) != 3) {
 			ptr = strchr(ptr, '\n');
 			if (!ptr) break;
@@ -123,6 +140,7 @@ static void ml_fini()
 		ptr = strchr(ptr, '\n');
 		if (!ptr) break;
 		ptr++;
+		/* anonymous spaces are most likely */
 		if (ptr[-2] != ' ') {	/* named space */
 			if (ptr[-2] != ']')	/* don't scan file BSS/data */
 				continue;
@@ -199,6 +217,7 @@ void *calloc(size_t nelem, size_t size)
 	return(result);
 }
 
+/* This is really slow.... */
 void *realloc(void *ptr, size_t size)
 {
 	size_t *result, *p2, len;
@@ -265,6 +284,9 @@ void free(void *ptr)
 	ml_free(p2);
 }
 
+/* Quick'n'dirty stack-like malloc for use while we try to find
+ * the actual malloc functions
+ */
 #define HEAPSIZE	(1048576*10)
 static long ml_hblock[HEAPSIZE];
 
@@ -366,4 +388,3 @@ ml_ifree(void *ptr)
 		ml_sh.mh_last = p;
 	}
 }
-
