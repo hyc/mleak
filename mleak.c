@@ -1,10 +1,8 @@
 #define _GNU_SOURCE
-#include <pthread.h>
 #include <dlfcn.h>
 #include <link.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +15,6 @@
 
 #define ML_STACK	16
 int ml_stacknum = ML_STACK;	/* length of stack trace */
-size_t ml_size = 1024*1048576L;	/* 1GB */
 
 /* hooks */
 typedef void *(mallfunc)(size_t);
@@ -163,35 +160,6 @@ static void ml_init()
 	ml_free = ff;
 	atexit(ml_fini);
 }
-
-#if 0
-ml_info *ml_ithread()
-{
-	char buf[64];
-	int fd;
-	ml_info *mi;
-
-	sprintf(buf, "ml.%p", (void *)pthread_self());
-	fd = open(buf, O_CREAT|O_RDWR, 0600);
-	if (fd < 0) {
-		perror("open");
-		exit(1);
-	}
-	ftruncate(fd, ml_size);
-	mi = mmap(NULL, ml_size, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_POPULATE, fd, 0);
-	if (mi == MAP_FAILED) {
-		perror("mmap");
-		exit(1);
-	}
-	close(fd);
-	mi->mi_end = (void **)((char *)mi + ml_size);
-	mi->mi_tail = mi->mi_data;
-	mi->mi_live = 0;
-	pthread_setspecific(ml_key, mi);
-	madvise(mi, ml_size, MADV_SEQUENTIAL);
-	return mi;
-}
-#endif
 
 /* my own malloc/realloc/free */
 void *malloc(size_t size)
