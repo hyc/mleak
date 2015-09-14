@@ -51,6 +51,7 @@ static const size_t ml_magic = 0x600FBA11DEAFB0B3L;
 /* Store a stacktrace into stk with up to stknum levels */
 static int ml_backtrace(size_t *stk, int stknum)
 {
+#if 1
 	unw_cursor_t cursor;
 	unw_context_t uc;
 	unw_word_t ip;
@@ -64,6 +65,42 @@ static int ml_backtrace(size_t *stk, int stknum)
 		unw_get_reg(&cursor, UNW_REG_IP, (unw_word_t *)&stk[i]);
 	}
 	return i;
+#else
+	int i, stop;
+	void *ptr;
+	for (i=0, stop=0; i<stknum && !stop; i++) {
+		switch(i) {
+		case 0: if (!(ptr=__builtin_frame_address(0))) {stknum = 0; stop=1;} break;
+		case 1: if (!(ptr=__builtin_frame_address(1))) {stknum = 1; stop=1;} break;
+		case 2: if (!(ptr=__builtin_frame_address(2))) {stknum = 2; stop=1;} break;
+		case 3: if (!(ptr=__builtin_frame_address(3))) {stknum = 3; stop=1;} break;
+		case 4: if (!(ptr=__builtin_frame_address(4))) {stknum = 4; stop=1;} break;
+		case 5: if (!(ptr=__builtin_frame_address(5))) {stknum = 5; stop=1;} break;
+		case 6: if (!(ptr=__builtin_frame_address(6))) {stknum = 6; stop=1;} break;
+		case 7: if (!(ptr=__builtin_frame_address(7))) {stknum = 7; stop=1;} break;
+		case 8: if (!(ptr=__builtin_frame_address(8))) {stknum = 8; stop=1;} break;
+		case 9: if (!(ptr=__builtin_frame_address(9))) {stknum = 9; stop=1;} break;
+		case 10: if (!(ptr=__builtin_frame_address(10))) {stknum = 10; stop=1;} break;
+		case 11: if (!(ptr=__builtin_frame_address(11))) {stknum = 11; stop=1;} break;
+		case 12: if (!(ptr=__builtin_frame_address(12))) {stknum = 12; stop=1;} break;
+		}
+	}
+	for (i=0; i<stknum; i++)
+		switch(i) {
+		case 0: stk[i] = (size_t)__builtin_return_address(0); break;
+		case 1: stk[i] = (size_t)__builtin_return_address(1); break;
+		case 2: stk[i] = (size_t)__builtin_return_address(2); break;
+		case 3: stk[i] = (size_t)__builtin_return_address(3); break;
+		case 4: stk[i] = (size_t)__builtin_return_address(4); break;
+		case 5: stk[i] = (size_t)__builtin_return_address(5); break;
+		case 6: stk[i] = (size_t)__builtin_return_address(6); break;
+		case 7: stk[i] = (size_t)__builtin_return_address(7); break;
+		case 8: stk[i] = (size_t)__builtin_return_address(8); break;
+		case 9: stk[i] = (size_t)__builtin_return_address(9); break;
+		case 10: stk[i] = (size_t)__builtin_return_address(10); break;
+		case 11: stk[i] = (size_t)__builtin_return_address(11); break;
+		}
+#endif
 }
 
 /* Scan the memory region from lo to hi looking for
