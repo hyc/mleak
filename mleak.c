@@ -209,11 +209,11 @@ static void ml_init()
 	call = dlsym( RTLD_NEXT, "calloc");
 	rall = dlsym( RTLD_NEXT, "realloc");
 	ff = dlsym( RTLD_NEXT, "free");
+	atexit(ml_fini);
 	ml_malloc = mall;
 	ml_calloc = call;
 	ml_realloc = rall;
 	ml_free = ff;
-	atexit(ml_fini);
 	ml_initing = 0;
 }
 
@@ -290,6 +290,9 @@ void *realloc(void *ptr, size_t size)
 		size |= ((long)nstk << 56);
 		*result++ = size;
 		*result++ = ml_magic;
+	} else {
+		/* on failure original should be unchanged */
+		p2[ml_stacknum+1] = ml_magic;
 	}
 
 	/* return the pointer */
@@ -412,6 +415,9 @@ static void
 ml_ifree(void *ptr)
 {
 	size_t *p = (size_t *)ptr;
+
+	if (!ptr)
+		return;
 
 	if (ptr < ml_sh.mh_base || ptr >= ml_sh.mh_end) {
 		write(2, WRT("ml_ifree - not our memory\n"));
