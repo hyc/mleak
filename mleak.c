@@ -22,6 +22,8 @@
 #endif
 int ml_stacknum = ML_STACK;	/* length of stack trace */
 
+static int ml_initing;
+
 /* hooks */
 typedef void *(mallfunc)(size_t);
 typedef void *(callfunc)(size_t, size_t);
@@ -100,7 +102,7 @@ static void ml_fini()
 	char *ptr, *end;
 
 	/* Output the loader map */
-	fd = open("ml.info", O_CREAT|O_WRONLY, 0600);
+	fd = open("ml.info", O_CREAT|O_WRONLY|O_TRUNC, 0600);
 	h = dlopen(NULL, RTLD_LAZY);
 	dlinfo(h, RTLD_DI_LINKMAP, &lm);
 	for (; lm && lm->l_prev; lm = lm->l_prev);
@@ -161,6 +163,7 @@ static void ml_init()
 	rallfunc *rall;
 	freefunc *ff;
 
+	ml_initing = 1;
 	mall = dlsym( RTLD_NEXT, "malloc");
 	if (!mall) {
 		write(2, WRT("ml_init failed to hook malloc!\n"));
@@ -174,6 +177,7 @@ static void ml_init()
 	ml_realloc = rall;
 	ml_free = ff;
 	atexit(ml_fini);
+	ml_initing = 0;
 }
 
 /* my own malloc/realloc/free */
@@ -181,6 +185,8 @@ void *malloc(size_t size)
 {
 	size_t *result, len;
 	int nstk;
+
+	if (ml_initing) return ml_malloc(size);
 
 	len = ml_stacknum + 1 /* magic */ + 1 /* size + nstk */;
 	result = ml_malloc(size + len * sizeof(void*));
@@ -200,6 +206,8 @@ void *calloc(size_t nelem, size_t size)
 {
 	size_t *result, len;
 	int nstk;
+
+	if (ml_initing) return ml_calloc(nelem, size);
 
 	len = ml_stacknum + 1 /* magic */ + 1 /* size + nstk */;
 
@@ -222,6 +230,8 @@ void *realloc(void *ptr, size_t size)
 {
 	size_t *result, *p2, len;
 	int nstk;
+
+	if (ml_initing) return ml_realloc(ptr, size);
 
 	if (!ptr)
 		return malloc(size);
@@ -253,7 +263,7 @@ void free(void *ptr)
 {
 	size_t *p2;
 
-	if (!ptr) {
+	if (!ptr || ml_initing) {
 		ml_free(ptr);
 		return;
 	}
