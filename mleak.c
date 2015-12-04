@@ -18,7 +18,7 @@
 #include "mleak.h"
 
 #ifndef ML_STACK
-#define ML_STACK	12
+#define ML_STACK	24
 #endif
 int ml_stacknum = ML_STACK;	/* length of stack trace */
 
