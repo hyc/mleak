@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <signal.h>
+
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 
@@ -130,8 +132,8 @@ static void ml_scan(void *lo, void *hi, int fd)
 
 static char ml_mapbuf[128*1024];
 
-/* Generate output at program end */
-static void ml_fini()
+/* Generate output */
+static void ml_dump()
 {
 	void *h;
 	struct link_map *lm;
@@ -191,6 +193,16 @@ static void ml_fini()
 	close(fd);
 }
 
+static void ml_sigdump(int sig)
+{
+	ml_dump();
+}
+
+static void ml_fini()
+{
+	ml_dump();
+}
+
 /* initialisation of malloc's hooks */
 static void ml_init() __attribute__ ((constructor));
 static void ml_init()
@@ -210,6 +222,12 @@ static void ml_init()
 	rall = dlsym( RTLD_NEXT, "realloc");
 	ff = dlsym( RTLD_NEXT, "free");
 	atexit(ml_fini);
+	{
+		struct sigaction act = {0};
+		act.sa_handler = ml_sigdump;
+		act.sa_flags = SA_RESTART;
+		sigaction(SIGPROF, &act, NULL);
+	}
 	ml_malloc = mall;
 	ml_calloc = call;
 	ml_realloc = rall;

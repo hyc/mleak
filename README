@@ -36,3 +36,12 @@ its report.
 
  -- Howard Chu 2015-03-24
 
+
+Snapshot feature: send a SIGPROF to the traced program, to get a dump of the
+memory in use at that time. Note that there is no thread locking protection
+on this action so your program should be idle when you send it the signal.
+The ml.data and ml.info files will be generated, and can be processed using
+mdump. Diffing the output from successive snapshots will let you see how
+memory use changes over time.
+
+ -- Howard Chu 2016-12-26
