@@ -170,8 +170,10 @@ static void ml_dump()
 	do {
 		void *lo, *hi;
 		int off;
-		/* Only private read/write regions are heap candidates */
-		if (sscanf(ptr, "%p-%p rw-p %x", &lo, &hi, &off) != 3) {
+		/* Only private read/write regions are heap candidates
+		 * May or may not be executable
+		 */
+		if (sscanf(ptr, "%p-%p rw%*1[x-]p %x", &lo, &hi, &off) != 3) {
 			ptr = strchr(ptr, '\n');
 			if (!ptr) break;
 			ptr++;
