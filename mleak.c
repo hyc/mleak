@@ -57,7 +57,6 @@ static int ml_backtrace(size_t *stk, int stknum)
 #if 1
 	unw_cursor_t cursor;
 	unw_context_t uc;
-	unw_word_t ip;
 	int i;
 
 	unw_getcontext(&uc);
@@ -138,7 +137,7 @@ static void ml_dump()
 {
 	void *h;
 	struct link_map *lm;
-	int fd, mfd, len;
+	int fd, len;
 	char *ptr, *end;
 
 	/* Output the loader map */
@@ -171,7 +170,6 @@ static void ml_dump()
 	do {
 		void *lo, *hi;
 		int off;
-		char *name;
 		/* Only private read/write regions are heap candidates */
 		if (sscanf(ptr, "%p-%p rw-p %x", &lo, &hi, &off) != 3) {
 			ptr = strchr(ptr, '\n');

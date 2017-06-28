@@ -1,5 +1,6 @@
 OPT=-g
-CFLAGS:=$(CFLAGS) $(OPT)
+INC=-I/usr/include/libiberty
+CFLAGS:=$(CFLAGS) $(OPT) $(INC)
 
 LIBS=mleak.so mleak++.so
 PRGS=mdump

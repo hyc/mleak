@@ -10,10 +10,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include "avl.h"
 #include "mleak.h"
 #include "mdump.h"
+
+/* mdname.c */
+extern int md_extract_names(int options, char *exec);
 
 /* object files */
 MD_DynObj **md_objects;

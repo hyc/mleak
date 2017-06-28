@@ -12,9 +12,9 @@
 
 /* FIXME: this file is a part of binutils. But binutils
    doesn't install it in a standard include/ directory!
-   Might have to edit this include path to locate it.
+   Might have to modify the include path to locate it.
    (needed for function cplus_demangle()) */
-#include <libiberty/demangle.h>
+#include <demangle.h>
 
 #include "avl.h"
 #include "mdump.h"
@@ -315,7 +315,6 @@ int md_fini_extract_dynamic()
 int md_extract_dynamic(HXRequest *req, int *idx)
 {
   int i, lo, hi;
-  char *tmp, buffer[1024];
 
   req->loc->valid = 0;
   if (md_syms == NULL)
@@ -475,7 +474,6 @@ int md_extract_names(int options, char *exec)
 {
   int i, j, k;
   HXRequest *reqlist=NULL;
-  char buffer[1024], tmpdir[1024];
   /* BFD data for exec */
   bfd *core_bfd;
   int core_min_insn_size;
@@ -484,10 +482,7 @@ int md_extract_names(int options, char *exec)
   int core_num_syms;
   asymbol **core_syms;
   /* temp data */
-  char *func_name;
-  char *file_name;
-  unsigned int line;
-  int not_all_done=0, valid;
+  int not_all_done=0;
   char *object;
 
   /* read names for memory tracking */
@@ -563,7 +558,7 @@ int md_extract_names(int options, char *exec)
 	  /* Search for a valid name but missing object/file info */
 	  if (reqlist[i].loc->valid)
 	    {
-	    int lo, hi, n;
+	    int lo, hi, n = 0;
             /* search if a symbol matches the given element */
 	    for(lo=0, hi=md_nb_syms-1; lo<=hi;)
               {
