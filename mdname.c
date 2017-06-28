@@ -10,10 +10,11 @@
 
 #include <bfd.h>
 
-/* FIXME: this file is in the current directory, but is a part of
-   binutils. But binutils don't installs it in standard include/
-   directory! (needed for function cplus_demangle()) */
-#include "demangle.h"
+/* FIXME: this file is a part of binutils. But binutils
+   doesn't install it in a standard include/ directory!
+   Might have to edit this include path to locate it.
+   (needed for function cplus_demangle()) */
+#include <libiberty/demangle.h>
 
 #include "avl.h"
 #include "mdump.h"
