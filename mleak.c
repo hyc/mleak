@@ -318,27 +318,6 @@ void *realloc(void *ptr, size_t size)
 	return(result);
 }
 
-void free(void *ptr)
-{
-	size_t *p2;
-
-	if (!ptr || ml_initing) {
-		ml_free(ptr);
-		return;
-	}
-
-	p2 = ptr;
-	/* not our pointer? */
-	if (p2[-1] != ml_magic) {
-		ml_free(ptr);
-		return;
-	}
-
-	p2[-1] = 0;
-	p2 -= (2+ml_stacknum);
-	ml_free(p2);
-}
-
 /* Quick'n'dirty stack-like malloc for use while we try to find
  * the actual malloc functions
  */
@@ -445,4 +424,30 @@ ml_ifree(void *ptr)
 		p--;
 		ml_sh.mh_last = p;
 	}
+}
+
+void free(void *ptr)
+{
+	size_t *p2;
+
+	if (!ptr || ml_initing) {
+		ml_free(ptr);
+		return;
+	}
+
+	if (ptr >= ml_sh.mh_base && ptr < ml_sh.mh_end) {
+		ml_ifree(ptr);
+		return;
+	}
+
+	p2 = ptr;
+	/* not our pointer? */
+	if (p2[-1] != ml_magic) {
+		ml_free(ptr);
+		return;
+	}
+
+	p2[-1] = 0;
+	p2 -= (2+ml_stacknum);
+	ml_free(p2);
 }
