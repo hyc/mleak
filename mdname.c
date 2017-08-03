@@ -538,9 +538,7 @@ int md_extract_names(int options, char *exec)
                             &core_text_sect, &core_syms,
 			    &core_min_insn_size, &core_offset_to_code))
 	{
-	if (reqlist != NULL)
-	  free(reqlist);
-	return(0);
+	continue;
 	}
       object = md_set_object(md_objects[k]->path, options);
       /* search for unmatched symbols */
