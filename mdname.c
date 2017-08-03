@@ -635,7 +635,7 @@ int md_extract_names(int options, char *exec)
 	  if (!reqlist[i].loc->object)
         reqlist[i].loc->object = md_ndef_object;
       }
-    else
+    if (reqlist[i].xname)
       {
       if (!reqlist[i].xname->done)
         md_demangle(reqlist[i].xname, options);
