@@ -168,8 +168,7 @@ void md_demangle(MDNym *xname, int options)
 }
 
 int md_open_bfd_file(char *name, bfd **core_bfd, int *core_num_syms,
-                     asection **core_text_sect, asymbol ***core_syms,
-		     int *core_min_insn_size, int *core_offset_to_code)
+                     asection **core_text_sect, asymbol ***core_syms)
 {
   *core_bfd = bfd_openr(name, 0);
   if (!(*core_bfd))
@@ -214,20 +213,6 @@ int md_open_bfd_file(char *name, bfd **core_bfd, int *core_num_syms,
     free(*core_syms);
     fprintf(stderr, "fncdump: %s\n", bfd_errmsg(bfd_get_error()));
     return(0);
-    }
-  *core_min_insn_size = 1;
-  *core_offset_to_code = 0;
-  switch (bfd_get_arch(*core_bfd))
-    {
-    case bfd_arch_vax:
-    case bfd_arch_tahoe:
-      *core_offset_to_code = 2;
-      break;
-    case bfd_arch_alpha:
-      *core_min_insn_size = 4;
-      break;
-    default:
-      break;
     }
   return(1);
 }
@@ -476,8 +461,6 @@ int md_extract_names(int options, char *exec)
   HXRequest *reqlist=NULL;
   /* BFD data for exec */
   bfd *core_bfd;
-  int core_min_insn_size;
-  int core_offset_to_code;
   asection *core_text_sect;
   int core_num_syms;
   asymbol **core_syms;
@@ -491,8 +474,7 @@ int md_extract_names(int options, char *exec)
 
   /* now open the executable */
   if (!md_open_bfd_file(exec, &core_bfd, &core_num_syms,
-                        &core_text_sect, &core_syms,
-			&core_min_insn_size, &core_offset_to_code))
+                        &core_text_sect, &core_syms))
     {
     if (reqlist != NULL)
       free(reqlist);
@@ -535,8 +517,7 @@ int md_extract_names(int options, char *exec)
 	  if (!md_objects[k]->path[0]) continue;
       /* now open the object */
       if (!md_open_bfd_file(md_objects[k]->path, &core_bfd, &core_num_syms,
-                            &core_text_sect, &core_syms,
-			    &core_min_insn_size, &core_offset_to_code))
+                            &core_text_sect, &core_syms))
 	{
 	continue;
 	}
