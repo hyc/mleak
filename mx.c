@@ -17,7 +17,7 @@ void md_display_stack(int nb_stack, MD_Loc *stack, int options)
 
   IFDECO
     printf("stack ");
-  for(l=1; l<nb_stack; l++)
+  for(l=0; l<nb_stack; l++)
     {
     if (stack[l].addr == NULL)
       {
@@ -35,17 +35,17 @@ void md_display_stack(int nb_stack, MD_Loc *stack, int options)
 	}
       else
 	{
-	if (l == 1)
+	if (!l)
 	  printf("     stack: ");
 	if (options & MD_MEMORY_LINE)
 	{
-	  if (l>1)
+	  if (l)
 	    printf("            ");
 	  printf("%20s : %s (%s:%d)\n", MD_DOBJ(stack[l].object),
 	    MD_DNAME(stack[l].name), MD_DFILE(stack[l].file), stack[l].line);
 	}else
 	{
-	  if (l>1)
+	  if (l)
 	    printf(" <- ");
   	  printf("%s", MD_DNAME(stack[l].name));
 	  if (l+1 == nb_stack || stack[l+1].addr == NULL)

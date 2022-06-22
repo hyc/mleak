@@ -239,7 +239,7 @@ int md_compare_dynobj(const void *e1, const void *e2)
   return l < 0 ? -1 : l > 0;
 }
 
-int md_init_extract_dynamic(int core_num_syms, asymbol **core_syms, int sortn)
+int md_init_extract_dynamic(int core_num_syms, asymbol **core_syms, unsigned long base, int sortn)
 {
   int i, j;
 
@@ -253,7 +253,7 @@ int md_init_extract_dynamic(int core_num_syms, asymbol **core_syms, int sortn)
     {
     if (core_syms[i]->flags & BSF_FILE) continue;
     md_syms[j].name = (char*)bfd_asymbol_name(core_syms[i]);
-    md_syms[j].addr = (void*)bfd_asymbol_value(core_syms[i]);
+    md_syms[j].addr = (void*)bfd_asymbol_value(core_syms[i]) + base;
     md_syms[j].flag = core_syms[i]->flags;
     md_syms[j].xname = NULL;
     md_syms[j].lines = NULL;
@@ -404,7 +404,7 @@ void md_find_line(bfd *core_bfd, asection *core_text_sect,
     md_syms[sym].nb_lines++;
     md_syms[sym].lines[i].addr = req->loc->addr;
     bfd_find_nearest_line(core_bfd, core_text_sect, core_syms,
-			  (bfd_vma)vaddr - core_text_sect->vma,
+			  (bfd_vma)vaddr - core_text_sect->vma - 1,
 			  (const char**)&file, (const char**)&func,
 			  &md_syms[sym].lines[i].line);
     if (file && !md_syms[sym].file)
@@ -433,14 +433,14 @@ int md_add_memreq(MD_Mem *me, HXRequest **reqlist)
                                (MD_Loc *)&me->where_f);
       }
     /* names for memory stack */
-    for(i=1; i<me->nb_stack_a; i++)
+    for(i=0; i<me->nb_stack_a; i++)
       {
       if (me->stack_a[i].addr == NULL)
 	break;
       *reqlist = md_add_request(*reqlist, &nb_reqlist,
                                &me->stack_a[i]);
       }
-    for(i=1; i<me->nb_stack_f; i++)
+    for(i=0; i<me->nb_stack_f; i++)
       {
       if (me->stack_f[i].addr == NULL)
 	break;
@@ -482,7 +482,7 @@ int md_extract_names(int options, char *exec)
     }
   /* we extract function names with our method, and after we extract
      the file:line information. */
-  md_init_extract_dynamic(core_num_syms, core_syms, 1);
+  md_init_extract_dynamic(core_num_syms, core_syms, (unsigned long)md_objects[0]->base, 1);
   object = md_set_object(exec, options);
   for(i=0; i<nb_reqlist; i++)
     {
@@ -492,7 +492,7 @@ int md_extract_names(int options, char *exec)
       {
       reqlist[i].loc->object = object;
       reqlist[i].done = 1;
-      md_find_line(core_bfd,core_text_sect,core_syms,(bfd_vma)reqlist[i].loc->addr,
+      md_find_line(core_bfd,core_text_sect,core_syms,(bfd_vma)reqlist[i].loc->addr - (unsigned long)md_objects[0]->base,
       		   &reqlist[i],j,options);
       }
     else
@@ -514,7 +514,7 @@ int md_extract_names(int options, char *exec)
 
     for (k=0; not_all_done && k<md_nobjects; k++)
       {
-	  if (!md_objects[k]->path[0]) continue;
+      if (!md_objects[k]->path[0]) continue;
       /* now open the object */
       if (!md_open_bfd_file(md_objects[k]->path, &core_bfd, &core_num_syms,
                             &core_text_sect, &core_syms))
@@ -523,7 +523,7 @@ int md_extract_names(int options, char *exec)
 	}
       object = md_set_object(md_objects[k]->path, options);
       /* search for unmatched symbols */
-      md_init_extract_dynamic(core_num_syms, core_syms, 0);
+      md_init_extract_dynamic(core_num_syms, core_syms, (unsigned long)md_objects[k]->base, 0);
       not_all_done = 0;
       for(i=0; i<nb_reqlist; i++)
         {
@@ -557,7 +557,7 @@ int md_extract_names(int options, char *exec)
 	      reqlist[i].loc->object = object;
 	      reqlist[i].done = 1;
 	      md_find_line(core_bfd, core_text_sect, core_syms,
-	      		   (bfd_vma)reqlist[i].loc->addr, &reqlist[i], j, options);
+			   (bfd_vma)reqlist[i].loc->addr - (unsigned long)md_objects[k]->base, &reqlist[i], j, options);
 	      }
 	    else
 	      not_all_done = 1;
@@ -571,10 +571,6 @@ int md_extract_names(int options, char *exec)
 	/* Search for matching addresses, using the object base address */
         not_all_done = 0;
         qsort(md_syms, md_nb_syms, sizeof(MDSym), md_compare_pointers);
-        for (i=0; i<md_nb_syms; i++) {
-			long l = (long)md_syms[i].addr + (long)md_objects[k]->base;
-			md_syms[i].addr = (void *)l;
-		}
         for (i=0; i<nb_reqlist; i++)
           {
 	    if (reqlist[i].loc->valid)
